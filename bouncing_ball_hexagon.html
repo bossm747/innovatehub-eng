@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bouncing Ball in Spinning Hexagon</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        .container {
+            text-align: center;
+        }
+        
+        h1 {
+            color: white;
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
+        }
+        
+        canvas {
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        
+        .controls {
+            margin-top: 20px;
+            color: white;
+        }
+        
+        .controls label {
+            margin-right: 10px;
+        }
+        
+        .controls input {
+            width: 80px;
+            margin-right: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ball in Spinning Hexagon</h1>
+        <canvas id="gameCanvas" width="600" height="600"></canvas>
+        <div class="controls">
+            <label>Gravity: <input type="range" id="gravitySlider" min="0" max="1" step="0.01" value="0.2"></label>
+            <label>Friction: <input type="range" id="frictionSlider" min="0" max="0.1" step="0.001" value="0.01"></label>
+            <label>Rotation: <input type="range" id="rotationSlider" min="0" max="0.1" step="0.001" value="0.01"></label>
+        </div>
+    </div>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        // Physics parameters
+        let gravity = 0.2;
+        let friction = 0.01;
+        let rotationSpeed = 0.01;
+        
+        // Ball properties
+        const ball = {
+            x: centerX,
+            y: centerY,
+            radius: 15,
+            velocityX: 2,
+            velocityY: 0,
+            color: '#FF5252'
+        };
+        
+        // Hexagon properties
+        const hexagon = {
+            radius: 200,
+            rotation: 0,
+            color: '#29B6F6'
+        };
+        
+        // Slider controls
+        document.getElementById('gravitySlider').addEventListener('input', (e) => {
+            gravity = parseFloat(e.target.value);
+        });
+        
+        document.getElementById('frictionSlider').addEventListener('input', (e) => {
+            friction = parseFloat(e.target.value);
+        });
+        
+        document.getElementById('rotationSlider').addEventListener('input', (e) => {
+            rotationSpeed = parseFloat(e.target.value);
+        });
+        
+        // Draw hexagon
+        function drawHexagon() {
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(hexagon.rotation);
+            
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI / 3) * i;
+                const x = hexagon.radius * Math.cos(angle);
+                const y = hexagon.radius * Math.sin(angle);
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.closePath();
+            ctx.strokeStyle = hexagon.color;
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+        
+        // Draw ball
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = ball.color;
+            
+            // Add gradient for 3D effect
+            const gradient = ctx.createRadialGradient(
+                ball.x, ball.y, 0,
+                ball.x, ball.y, ball.radius
+            );
+            gradient.addColorStop(0, '#FF8A80');
+            gradient.addColorStop(1, '#D32F2F');
+            ctx.fillStyle = gradient;
+            
+            ctx.fill();
+            ctx.closePath();
+        }
+        
+        // Calculate distance from point to line segment
+        function distanceToSegment(point, lineStart, lineEnd) {
+            const A = point.x - lineStart.x;
+            const B = point.y - lineStart.y;
+            const C = lineEnd.x - lineStart.x;
+            const D = lineEnd.y - lineStart.y;
+            
+            const dot = A * C + B * D;
+            const lenSq = C * C + D * D;
+            let param = -1;
+            
+            if (lenSq !== 0) {
+                param = dot / lenSq;
+            }
+            
+            let xx, yy;
+            
+            if (param < 0) {
+                xx = lineStart.x;
+                yy = lineStart.y;
+            } else if (param > 1) {
+                xx = lineEnd.x;
+                yy = lineEnd.y;
+            } else {
+                xx = lineStart.x + param * C;
+                yy = lineStart.y + param * D;
+            }
+            
+            const dx = point.x - xx;
+            const dy = point.y - yy;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+        
+        // Get hexagon vertices
+        function getHexagonVertices() {
+            const vertices = [];
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI / 3) * i + hexagon.rotation;
+                vertices.push({
+                    x: centerX + hexagon.radius * Math.cos(angle),
+                    y: centerY + hexagon.radius * Math.sin(angle)
+                });
+            }
+            return vertices;
+        }
+        
+        // Check collision and handle bounce
+        function checkCollision() {
+            const vertices = getHexagonVertices();
+            
+            for (let i = 0; i < 6; i++) {
+                const start = vertices[i];
+                const end = vertices[(i + 1) % 6];
+                
+                const distance = distanceToSegment(
+                    {x: ball.x, y: ball.y},
+                    start,
+                    end
+                );
+                
+                if (distance <= ball.radius) {
+                    // Calculate normal vector to the wall
+                    const wallVec = {x: end.x - start.x, y: end.y - start.y};
+                    const length = Math.sqrt(wallVec.x * wallVec.x + wallVec.y * wallVec.y);
+                    const normal = {x: -wallVec.y / length, y: wallVec.x / length};
+                    
+                    // Calculate dot product of velocity and normal
+                    const dot = ball.velocityX * normal.x + ball.velocityY * normal.y;
+                    
+                    // Apply reflection
+                    ball.velocityX = ball.velocityX - 2 * dot * normal.x;
+                    ball.velocityY = ball.velocityY - 2 * dot * normal.y;
+                    
+                    // Apply energy loss (damping)
+                    ball.velocityX *= (1 - friction);
+                    ball.velocityY *= (1 - friction);
+                    
+                    // Move ball outside collision range
+                    const overlap = ball.radius - distance;
+                    ball.x += normal.x * overlap * 1.1;
+                    ball.y += normal.y * overlap * 1.1;
+                }
+            }
+        }
+        
+        // Update physics
+        function updatePhysics() {
+            // Apply gravity
+            ball.velocityY += gravity;
+            
+            // Apply friction
+            ball.velocityX *= (1 - friction);
+            ball.velocityY *= (1 - friction);
+            
+            // Update position
+            ball.x += ball.velocityX;
+            ball.y += ball.velocityY;
+            
+            // Rotate hexagon
+            hexagon.rotation += rotationSpeed;
+            if (hexagon.rotation > Math.PI * 2) {
+                hexagon.rotation -= Math.PI * 2;
+            }
+        }
+        
+        // Animation loop
+        function animate() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw and update
+            drawHexagon();
+            updatePhysics();
+            checkCollision();
+            drawBall();
+            
+            // Continue animation
+            requestAnimationFrame(animate);
+        }
+        
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>

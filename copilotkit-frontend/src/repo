@@ -1,0 +1,3 @@
+git remote add origin https://github.com/bossm747/innovatehub-eng.git
+git branch -M main
+git push -u origin main
