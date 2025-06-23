@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Request, Response, Body
+from fastapi import FastAPI, Request, Response, Body, UploadFile
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any
@@ -7,8 +7,9 @@ import asyncio
 import json
 from dotenv import load_dotenv
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from crawl4ai import crawl_url
+import subprocess
 
 load_dotenv()
 
@@ -168,17 +169,147 @@ def mcp_list_tools():
     """List available tools in MCP format."""
     return {"tools": MCP_TOOLS}
 
+# --- File Management Endpoints ---
+
+class ListFilesRequest(BaseModel):
+    path: str = Field(default=".", description="Directory to list")
+
+class ListFilesResponse(BaseModel):
+    files: list
+
+@app.post("/files/list", response_model=ListFilesResponse)
+def list_files(req: ListFilesRequest):
+    try:
+        files = os.listdir(req.path)
+        return ListFilesResponse(files=files)
+    except Exception as e:
+        return ListFilesResponse(files=[f"Error: {str(e)}"])
+
+class ReadFileRequest(BaseModel):
+    path: str
+
+class ReadFileResponse(BaseModel):
+    content: str
+
+@app.post("/files/read", response_model=ReadFileResponse)
+def read_file(req: ReadFileRequest):
+    try:
+        with open(req.path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return ReadFileResponse(content=content)
+    except Exception as e:
+        return ReadFileResponse(content=f"Error: {str(e)}")
+
+class WriteFileRequest(BaseModel):
+    path: str
+    content: str
+
+class WriteFileResponse(BaseModel):
+    status: str
+
+@app.post("/files/write", response_model=WriteFileResponse)
+def write_file(req: WriteFileRequest):
+    try:
+        with open(req.path, "w", encoding="utf-8") as f:
+            f.write(req.content)
+        return WriteFileResponse(status="success")
+    except Exception as e:
+        return WriteFileResponse(status=f"Error: {str(e)}")
+
+class DeleteFileRequest(BaseModel):
+    path: str
+
+class DeleteFileResponse(BaseModel):
+    status: str
+
+@app.post("/files/delete", response_model=DeleteFileResponse)
+def delete_file(req: DeleteFileRequest):
+    try:
+        os.remove(req.path)
+        return DeleteFileResponse(status="success")
+    except Exception as e:
+        return DeleteFileResponse(status=f"Error: {str(e)}")
+
+# --- Terminal/Automation Endpoint ---
+class TerminalExecRequest(BaseModel):
+    command: str
+
+class TerminalExecResponse(BaseModel):
+    output: str
+    status: str
+
+@app.post("/terminal/exec", response_model=TerminalExecResponse)
+def terminal_exec(req: TerminalExecRequest):
+    try:
+        # Security: Only allow safe commands in production!
+        result = subprocess.run(req.command, shell=True, capture_output=True, text=True, timeout=10)
+        return TerminalExecResponse(output=result.stdout + result.stderr, status="success")
+    except Exception as e:
+        return TerminalExecResponse(output="", status=f"Error: {str(e)}")
+
+# --- Register as MCP tools ---
+MCP_TOOLS.extend([
+    {
+        "name": "list_files",
+        "description": "List files in a directory.",
+        "parameters": {"path": {"type": "string", "default": "."}},
+        "returns": {"type": "object", "properties": {"files": {"type": "array"}}}
+    },
+    {
+        "name": "read_file",
+        "description": "Read a file's contents.",
+        "parameters": {"path": {"type": "string"}},
+        "returns": {"type": "object", "properties": {"content": {"type": "string"}}}
+    },
+    {
+        "name": "write_file",
+        "description": "Write or update a file.",
+        "parameters": {"path": {"type": "string"}, "content": {"type": "string"}},
+        "returns": {"type": "object", "properties": {"status": {"type": "string"}}}
+    },
+    {
+        "name": "delete_file",
+        "description": "Delete a file.",
+        "parameters": {"path": {"type": "string"}},
+        "returns": {"type": "object", "properties": {"status": {"type": "string"}}}
+    },
+    {
+        "name": "terminal_exec",
+        "description": "Execute a shell command (use with caution).",
+        "parameters": {"command": {"type": "string"}},
+        "returns": {"type": "object", "properties": {"output": {"type": "string"}, "status": {"type": "string"}}}
+    },
+])
+
 @app.post("/mcp/tool-call")
 async def mcp_tool_call(
     tool_name: str = Body(...),
     parameters: dict = Body(...)
 ):
-    """Invoke a tool by name (MCP format)."""
     if tool_name == "crawl":
         req = CrawlRequest(**parameters)
         result = await crawl_endpoint(req)
         return {"result": result.dict()}
-    # Add more tool dispatches here
+    elif tool_name == "list_files":
+        req = ListFilesRequest(**parameters)
+        result = list_files(req)
+        return {"result": result.dict()}
+    elif tool_name == "read_file":
+        req = ReadFileRequest(**parameters)
+        result = read_file(req)
+        return {"result": result.dict()}
+    elif tool_name == "write_file":
+        req = WriteFileRequest(**parameters)
+        result = write_file(req)
+        return {"result": result.dict()}
+    elif tool_name == "delete_file":
+        req = DeleteFileRequest(**parameters)
+        result = delete_file(req)
+        return {"result": result.dict()}
+    elif tool_name == "terminal_exec":
+        req = TerminalExecRequest(**parameters)
+        result = terminal_exec(req)
+        return {"result": result.dict()}
     return {"error": f"Tool '{tool_name}' not found."}
 
 # --- End MCP section ---
