@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, Body
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any
@@ -146,6 +146,42 @@ async def crawl_endpoint(req: CrawlRequest):
         return CrawlResponse(url=req.url, content=result["content"], status="success")
     except Exception as e:
         return CrawlResponse(url=req.url, content="", status="error", error=str(e))
+
+# --- MCP (Model Context Protocol) compatibility ---
+
+MCP_TOOLS = [
+    {
+        "name": "crawl",
+        "description": "Crawl a web page and return its content as markdown.",
+        "parameters": {
+            "url": {"type": "string", "description": "The URL to crawl."},
+            "max_depth": {"type": "integer", "default": 1, "description": "How deep to crawl."},
+            "markdown": {"type": "boolean", "default": True, "description": "Return markdown output."}
+        },
+        "returns": {"type": "object", "properties": {"content": {"type": "string"}}}
+    },
+    # Add more tools here (file management, terminal, etc.)
+]
+
+@app.get("/mcp/tools")
+def mcp_list_tools():
+    """List available tools in MCP format."""
+    return {"tools": MCP_TOOLS}
+
+@app.post("/mcp/tool-call")
+async def mcp_tool_call(
+    tool_name: str = Body(...),
+    parameters: dict = Body(...)
+):
+    """Invoke a tool by name (MCP format)."""
+    if tool_name == "crawl":
+        req = CrawlRequest(**parameters)
+        result = await crawl_endpoint(req)
+        return {"result": result.dict()}
+    # Add more tool dispatches here
+    return {"error": f"Tool '{tool_name}' not found."}
+
+# --- End MCP section ---
 
 # ---
 # Extend with more endpoints (tool calls, knowledge base, etc.) as needed
