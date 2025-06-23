@@ -7,6 +7,8 @@ import asyncio
 import json
 from dotenv import load_dotenv
 import httpx
+from pydantic import BaseModel
+from crawl4ai import crawl_url
 
 load_dotenv()
 
@@ -27,6 +29,17 @@ AVAILABLE_MODELS = [
     {"provider": "deepseek", "model": "deepseek-reasoner"},
     # Add more models/providers here
 ]
+
+class CrawlRequest(BaseModel):
+    url: str
+    max_depth: int = 1
+    markdown: bool = True
+
+class CrawlResponse(BaseModel):
+    url: str
+    content: str
+    status: str
+    error: str = None
 
 @app.get("/models")
 def list_models():
@@ -125,6 +138,14 @@ async def chat(request: Request):
         call_llm(model, messages),
         media_type="text/event-stream"
     )
+
+@app.post("/crawl", response_model=CrawlResponse)
+async def crawl_endpoint(req: CrawlRequest):
+    try:
+        result = await crawl_url(req.url, max_depth=req.max_depth, markdown=req.markdown)
+        return CrawlResponse(url=req.url, content=result["content"], status="success")
+    except Exception as e:
+        return CrawlResponse(url=req.url, content="", status="error", error=str(e))
 
 # ---
 # Extend with more endpoints (tool calls, knowledge base, etc.) as needed
