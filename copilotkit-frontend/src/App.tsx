@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
 import { CopilotSidebar } from "@copilotkit/react-ui";
+import logo from "../public/innovatehub-logo.png";
+
+function formatTimestamp(date: Date) {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
 function App() {
   const [models, setModels] = useState<{provider: string, model: string}[]>([]);
@@ -24,50 +29,45 @@ function App() {
 
   return (
     <CopilotKit runtimeUrl="/api/copilotkit">
-      <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#f6f8fa" }}>
-        <header style={{ display: "flex", alignItems: "center", background: "#1e293b", color: "#fff", padding: "16px 32px" }}>
-          <img src={process.env.PUBLIC_URL + "/innovatehub-logo.png"} alt="Innovate Hub Logo" style={{ height: 48, marginRight: 20, borderRadius: 8, background: "#fff" }} />
-          <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0 }}>InnovateHub AI App Developer</h1>
-        </header>
-        <div style={{ display: "flex", flex: 1 }}>
-          <div style={{ flex: 1, padding: 32 }}>
-            <h2 style={{ color: "#1e293b" }}>Welcome!</h2>
+      <div style={{ display: "flex", height: "100vh", background: "#f5f7fa" }}>
+        <div style={{ flex: 1, padding: 32 }}>
+          <header style={{ display: "flex", alignItems: "center", marginBottom: 24 }}>
+            <img src={logo} alt="InnovateHub Logo" style={{ height: 48, marginRight: 16 }} />
+            <h1 style={{ color: "#1a237e", fontWeight: 700, fontSize: 32 }}>InnovateHub AI App Developer</h1>
+          </header>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontWeight: 600, color: "#333" }}>Select Model: </label>
             {loading ? (
-              <p>Loading models...</p>
+              <span style={{ marginLeft: 8 }}>Loading models...</span>
             ) : error ? (
-              <p style={{ color: 'red' }}>{error}</p>
+              <span style={{ color: "red", marginLeft: 8 }}>{error}</span>
             ) : (
-              <label>
-                <b>Select Model:</b>
-                <select
-                  value={selectedModel}
-                  onChange={e => setSelectedModel(e.target.value)}
-                  style={{ marginLeft: 8, padding: 4, borderRadius: 4, border: '1px solid #cbd5e1' }}
-                >
-                  {models.map(m => (
-                    <option key={m.model} value={m.model}>
-                      {m.provider} - {m.model}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <select
+                value={selectedModel}
+                onChange={e => setSelectedModel(e.target.value)}
+                style={{ marginLeft: 8, padding: 4, borderRadius: 4 }}
+              >
+                {models.map((m, i) => (
+                  <option key={i} value={m.model}>{m.provider} - {m.model}</option>
+                ))}
+              </select>
             )}
-            <p style={{ marginTop: 16, color: "#475569" }}>
-              Start chatting with your selected LLM in the sidebar!
-            </p>
           </div>
+          <div style={{ marginTop: 32, color: "#666" }}>
+            <p>Welcome to <b>InnovateHub</b>! Select a model and start chatting with your AI developer assistant.</p>
+          </div>
+        </div>
+        <div style={{ width: 420, background: "#fff", borderLeft: "1px solid #e0e0e0", display: "flex", flexDirection: "column" }}>
           <CopilotSidebar
-            defaultOpen={true}
-            labels={{
-              title: "InnovateHub AI Assistant",
-              initial: "Hello! How can I help you today?",
-            }}
-            context={{ model: selectedModel }}
+            style={{ flex: 1 }}
+            avatarUrl={logo}
+            showTimestamps
+            messageBubbleStyle={{ borderRadius: 16, padding: 12, margin: 8 }}
+            userAvatarUrl="https://ui-avatars.com/api/?name=User&background=1a237e&color=fff"
+            assistantAvatarUrl={logo}
+            brandingFooter={<div style={{ textAlign: "center", padding: 12, color: "#888" }}>InnovateHub AI App Developer &copy; 2025</div>}
           />
         </div>
-        <footer style={{ background: "#1e293b", color: "#fff", textAlign: "center", padding: 12 }}>
-          Powered by Innovate Hub &bull; Multi-LLM AG UI Demo
-        </footer>
       </div>
     </CopilotKit>
   );
