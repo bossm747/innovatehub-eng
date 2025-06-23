@@ -10,6 +10,7 @@ import httpx
 from pydantic import BaseModel, Field
 from crawl4ai import crawl_url
 import subprocess
+from stagehand import Stagehand, BrowserAction
 
 load_dotenv()
 
@@ -281,6 +282,50 @@ MCP_TOOLS.extend([
     },
 ])
 
+# --- Stagehand Browser Automation Endpoint ---
+class StagehandRequest(BaseModel):
+    action: str
+    url: str = None
+    selector: str = None
+    text: str = None
+
+class StagehandResponse(BaseModel):
+    status: str
+    result: str = None
+    error: str = None
+
+stagehand = Stagehand()
+
+@app.post("/stagehand", response_model=StagehandResponse)
+async def stagehand_endpoint(req: StagehandRequest):
+    try:
+        if req.action == "open_url":
+            await stagehand.open_page(req.url)
+            return StagehandResponse(status="success", result=f"Opened {req.url}")
+        elif req.action == "click":
+            await stagehand.click(req.selector)
+            return StagehandResponse(status="success", result=f"Clicked {req.selector}")
+        elif req.action == "extract_text":
+            text = await stagehand.extract_text(req.selector)
+            return StagehandResponse(status="success", result=text)
+        else:
+            return StagehandResponse(status="error", error="Unknown action")
+    except Exception as e:
+        return StagehandResponse(status="error", error=str(e))
+
+# --- Register Stagehand as MCP tool ---
+MCP_TOOLS.append({
+    "name": "stagehand",
+    "description": "Browser automation: open URL, click, extract text, etc.",
+    "parameters": {
+        "action": {"type": "string", "description": "Action to perform (open_url, click, extract_text)"},
+        "url": {"type": "string", "description": "URL to open (for open_url)"},
+        "selector": {"type": "string", "description": "CSS selector (for click/extract)"},
+        "text": {"type": "string", "description": "Text to type/click (future)"}
+    },
+    "returns": {"type": "object", "properties": {"status": {"type": "string"}, "result": {"type": "string"}, "error": {"type": "string"}}}
+})
+
 @app.post("/mcp/tool-call")
 async def mcp_tool_call(
     tool_name: str = Body(...),
@@ -309,6 +354,10 @@ async def mcp_tool_call(
     elif tool_name == "terminal_exec":
         req = TerminalExecRequest(**parameters)
         result = terminal_exec(req)
+        return {"result": result.dict()}
+    elif tool_name == "stagehand":
+        req = StagehandRequest(**parameters)
+        result = await stagehand_endpoint(req)
         return {"result": result.dict()}
     return {"error": f"Tool '{tool_name}' not found."}
 
